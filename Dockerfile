@@ -12,4 +12,4 @@ RUN mkdir -p uploads
 
 EXPOSE 10000
 
-CMD ["npm", "start"]
+CMD ["npm", "/test/src/server.js"]
