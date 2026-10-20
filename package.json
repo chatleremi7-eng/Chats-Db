@@ -4,9 +4,9 @@
   "description": "Production-ready Realtime Chat Backend API with Express, Socket.IO, JWT, and SQLite",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
+    "start": "node /src/server.js",
     "dev": "nodemon src/server.js",
-    "migrate": "node src/config/run-migrations.js",
+    "migrate": "node /src/config/run-migrations.js",
     "test": "jest --detectOpenHandles --forceExit"
   },
   "dependencies": {
