@@ -13,6 +13,6 @@ RUN mkdir -p uploads
 EXPOSE 10000
 
  
-CMD ["node", "/src/server.js"]
+CMD ["node", "src/server.js"]
 
 
