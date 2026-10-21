@@ -1,61 +1,54 @@
-const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 require('dotenv').config();
 
-const dbPath = path.resolve(__dirname, '../../database.sqlite');
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('Error opening SQLite database', err.message);
-  } else {
-    console.log('Connected to local SQLite database:', dbPath);
-  }
-});
+// If DATABASE_URL exists (on Render), use Postgres. Else use SQLite local
+if (process.env.DATABASE_URL) {
+  const { Pool } = require('pg');
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
 
-// Helper wrapper to make sqlite3 query interface compatible with PostgreSQL pg pool style
-module.exports = {
-  query: (text, params = []) => {
-    return new Promise((resolve, reject) => {
-      // Convert PostgreSQL $1, $2 placeholders to SQLite ? placeholders
-      let sqliteText = text;
-      params.forEach((_, i) => {
-        sqliteText = sqliteText.replace(new RegExp(`\\\$${i + 1}`, 'g'), '?');
+  pool.on('connect', () => console.log('Connected to Postgres database'));
+  pool.on('error', (err) => console.error('Postgres error', err));
+
+  module.exports = {
+    query: (text, params) => pool.query(text, params),
+    pool
+  };
+
+} else {
+  // Local development - SQLite
+  const sqlite3 = require('sqlite3').verbose();
+  const dbPath = path.resolve(__dirname, '../../database.sqlite');
+  const db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+      console.error('Error opening SQLite database', err.message);
+    } else {
+      console.log('Connected to local SQLite database:', dbPath);
+    }
+  });
+
+  module.exports = {
+    query: (text, params = []) => {
+      return new Promise((resolve, reject) => {
+        // Handle $1, $2 postgres style -> ? for sqlite
+        const sqliteText = text.replace(/\$[0-9]+/g, '?');
+        if (text.trim().toUpperCase().startsWith('SELECT')) {
+          db.all(sqliteText, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve({ rows });
+          });
+        } else {
+          db.run(sqliteText, params, function(err) {
+            if (err) reject(err);
+            else resolve({ rows: [], rowCount: this.changes });
+          });
+        }
       });
-
-      const trimmed = text.trim().toUpperCase();
-
-      if (trimmed.startsWith('SELECT')) {
-        db.all(sqliteText, params, (err, rows) => {
-          if (err) reject(err);
-          else resolve({ rows: rows || [] });
-        });
-      } else if (trimmed.includes('RETURNING')) {
-        // Handle queries with RETURNING by executing run then fetching last inserted row
-        // e.g. INSERT INTO users (...) VALUES (...) RETURNING id, username
-        const cleanText = sqliteText.replace(/RETURNING\s+[\w\s,]+$/i, '');
-        db.run(cleanText, params, function(err) {
-          if (err) {
-            reject(err);
-          } else {
-            const lastId = this.lastID;
-            // Fetch the inserted/updated row
-            const tableMatch = text.match(/INTO\s+(\w+)/i) || text.match(/UPDATE\s+(\w+)/i);
-            if (tableMatch && lastId) {
-              db.get(`SELECT * FROM ${tableMatch[1]} WHERE id = ?`, [lastId], (rowErr, row) => {
-                if (rowErr) reject(rowErr);
-                else resolve({ rows: [row] });
-              });
-            } else {
-              resolve({ rows: [], insertId: lastId });
-            }
-          }
-        });
-      } else {
-        db.run(sqliteText, params, function(err) {
-          if (err) reject(err);
-          else resolve({ rows: [], insertId: this.lastID, changes: this.changes });
-        });
-      }
-    });
-  },
-  db
-};
+    }
+  };
+}
+      // Convert PostgreSQL $1, $2 placeholders to SQLite ? placeholders
+     
+      
